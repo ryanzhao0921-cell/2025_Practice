@@ -1,0 +1,203 @@
+\section{问题一的模型建立与求解}
+
+\subsection{数据层级与分析单位}
+
+男胎数据具有“孕妇---采血---重复测序”的三级结构：同一孕妇可能在多个孕周接受采血，同一次采血又可能被重复测序。因此，若直接将1082条测序记录视为相互独立的样本，会同时忽略孕妇内相关性并放大技术重复的权重。
+
+本文将一次采血作为主分析单位。对具有相同孕妇代码和检测抽血次数的记录，将Y染色体浓度、孕周、BMI和年龄取均值，得到1021次采血观测，涉及267名孕妇；原始1082条记录仅用于敏感性分析。数据结构汇总见表~\ref{tab:q1-data-summary}。
+
+\begin{table}[H]
+  \centering
+  \caption{问题一数据结构与分析单位}
+  \label{tab:q1-data-summary}
+  \begin{tabular}{lc}
+    \toprule
+    项目 & 数量 \\
+    \midrule
+    原始测序记录 & 1082条 \\
+    男胎孕妇 & 267人 \\
+    同次采血重复测序组 & 40组 \\
+    聚合后采血观测 & 1021次 \\
+    至少具有两个不同孕周观测的孕妇 & 260人 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{探索性分析与变量筛选}
+
+\subsubsection{Y染色体浓度与孕周、BMI的边际关系}
+
+分别计算Pearson线性相关系数和Spearman秩相关系数，结果见表~\ref{tab:q1-correlation}。Y染色体浓度与孕周呈弱正相关，与BMI呈弱负相关。图~\ref{fig:q1-eda}中的LOWESS曲线与线性拟合存在明显差异，说明孕周效应可能包含非线性结构，BMI的方向则需要在控制孕周和个体差异后进一步检验。
+
+\begin{table}[H]
+  \centering
+  \caption{Y染色体浓度与主要变量的边际相关性}
+  \label{tab:q1-correlation}
+  \begin{tabular}{lccc}
+    \toprule
+    变量 & Pearson相关系数 & Spearman相关系数 & 初步方向 \\
+    \midrule
+    检测孕周 & 0.1266 & 0.0843 & 正向 \\
+    孕妇BMI & -0.1513 & -0.1550 & 负向 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{q1_y_vs_week.png}
+    \caption{Y染色体浓度与检测孕周}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{q1_y_vs_bmi.png}
+    \caption{Y染色体浓度与孕妇BMI}
+  \end{subfigure}
+  \caption{Y染色体浓度与主要解释变量的散点图及平滑趋势}
+  \label{fig:q1-eda}
+\end{figure}
+
+\subsubsection{重复测量与个体异质性}
+
+图~\ref{fig:q1-trajectories}连接了同一孕妇在不同孕周的观测。不同孕妇的基础Y染色体浓度和随孕周变化的速度均存在明显差异，同一孕妇内部观测也并非独立。这表明普通多元线性回归的独立性假设不适合作为主模型，应使用能够显式描述孕妇内相关性的混合效应模型\cite{laird1982random,bates2015fitting}。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.93\textwidth]{q1_individual_trajectories.png}
+  \caption{男胎孕妇Y染色体浓度的个体纵向轨迹}
+  \label{fig:q1-trajectories}
+\end{figure}
+
+此外，BMI、体重和身高之间存在确定性关系，三者同时进入模型时VIF分别达到218.60、351.34和106.90，产生严重多重共线性。考虑到BMI是问题二、问题三的核心分组指标，最终保留BMI，不再同时加入体重和身高；年龄VIF为1.01，作为临床控制变量保留。
+
+\subsection{线性混合效应模型}
+
+\subsubsection{模型设定}
+
+将第$i$名孕妇第$j$次采血的连续孕周记为$T_{ij}$，定义中心化孕周
+
+\begin{equation}
+  W_{ij}=T_{ij}-\bar T,\qquad \bar T=16.667343.
+  \label{eq:q1-centered-week}
+\end{equation}
+
+以Y染色体浓度$Y_{ij}$为因变量，建立含随机截距与随机孕周斜率的线性混合效应模型：
+
+\begin{equation}
+  Y_{ij}=\beta_0+\beta_1W_{ij}+\beta_2W_{ij}^{2}
+  +\beta_3B_{ij}+\beta_4A_i+b_{0i}+b_{1i}W_{ij}+\varepsilon_{ij},
+  \label{eq:q1-lmm}
+\end{equation}
+
+其中，$B_{ij}$为BMI，$A_i$为年龄；$b_{0i}$和$b_{1i}$分别表示孕妇层面的随机截距与随机孕周斜率，刻画个体基础水平和变化速度的差异；$\varepsilon_{ij}$为采血层面的随机误差。固定效应和随机效应均采用最大似然法估计。
+
+候选模型比较显示，仅包含孕周线性项的随机斜率模型AIC约为$-4855.4$；加入孕周二次项后AIC下降至$-4909.3$，且二次项显著。继续加入BMI二次项带来的改善很小，BIC反而略差。因此最终保留孕周二次项，BMI保持线性形式。
+
+\subsubsection{固定效应估计与显著性检验}
+
+最终模型固定效应结果见表~\ref{tab:q1-fixed-effects}。
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{问题一线性混合效应模型的固定效应估计}
+  \label{tab:q1-fixed-effects}
+  \begin{tabular}{lrrrr}
+    \toprule
+    变量 & 系数 & 标准误 & 95\%置信区间 & $p$值 \\
+    \midrule
+    截距 & 0.138148 & 0.022057 & $[0.094917,\ 0.181379]$ & $<0.001$ \\
+    中心化孕周 & 0.003176 & 0.000253 & $[0.002680,\ 0.003673]$ & $<0.001$ \\
+    中心化孕周平方 & 0.000264 & 0.000034 & $[0.000197,\ 0.000331]$ & $<0.001$ \\
+    BMI & -0.001486 & 0.000524 & $[-0.002512,\ -0.000459]$ & 0.0046 \\
+    年龄 & -0.000515 & 0.000487 & $[-0.001469,\ 0.000440]$ & 0.2908 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+孕周一次项和二次项均显著，说明Y染色体浓度与孕周之间存在显著非线性关系；结合图~\ref{fig:q1-fixed-prediction}可知，在样本主要观测范围内，Y染色体浓度总体随孕周增加而升高。BMI系数为$-0.001486$，在控制孕周、年龄和孕妇个体差异后仍显著，表示BMI每增加$1\ \mathrm{kg/m^2}$，模型预测的Y染色体浓度平均下降约0.001486，即0.149个百分点。年龄的$p=0.2908$，当前数据不足以证明其具有显著独立效应，但不能据此断言年龄完全没有影响。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.88\textwidth]{q1_predicted_Y_by_week_BMI.png}
+  \caption{不同BMI水平下Y染色体浓度随孕周变化的固定效应预测}
+  \label{fig:q1-fixed-prediction}
+\end{figure}
+
+\subsubsection{随机效应与模型拟合}
+
+模型共使用1021次采血和267名孕妇，已正常收敛，对数似然为2463.64，AIC为$-4909.29$，BIC为$-4864.93$。随机效应和残差估计见表~\ref{tab:q1-random-effects}。
+
+\begin{table}[H]
+  \centering
+  \caption{问题一模型的随机效应与拟合指标}
+  \label{tab:q1-random-effects}
+  \begin{tabular}{lc@{\qquad}lc}
+    \toprule
+    指标 & 数值 & 指标 & 数值 \\
+    \midrule
+    随机截距标准差 & 0.030055 & 随机孕周斜率标准差 & 0.002725 \\
+    截距--斜率相关系数 & 0.4851 & 残差标准差 & 0.013262 \\
+    对数似然 & 2463.64 & AIC & $-4909.29$ \\
+    观测数 & 1021 & 孕妇数 & 267 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+随机截距和随机斜率均具有不可忽略的变异，说明不同孕妇不仅基础Y染色体浓度不同，其随孕周变化的速度也存在差异，进一步支持使用随机截距与随机斜率模型。
+
+\subsection{模型诊断与稳健性分析}
+
+残差--拟合图和Q--Q图见图~\ref{fig:q1-diagnostics}。残差总体围绕0分布，未出现明显系统性曲线；Q--Q图中部较贴近理论直线，但两端存在一定偏离。因此模型对主要均值结构的描述较稳定，但残差尾部正态性并不完美，仍需结合敏感性分析判断主要结论。
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{q1_residual_vs_fitted.png}
+    \caption{残差与拟合值}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{q1_residual_qq.png}
+    \caption{残差Q--Q图}
+  \end{subfigure}
+  \caption{问题一线性混合效应模型诊断}
+  \label{fig:q1-diagnostics}
+\end{figure}
+
+为检验同次采血取均值是否人为改变结论，使用1082条未聚合测序记录重新拟合同一模型。结果见表~\ref{tab:q1-sensitivity}，孕周、孕周平方和BMI的方向与显著性均保持不变，年龄在两种口径下均不显著，说明核心统计结论对聚合处理稳健。
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{聚合与未聚合数据的固定效应敏感性比较}
+  \label{tab:q1-sensitivity}
+  \begin{tabular}{lrrrr}
+    \toprule
+    变量 & 主模型系数 & 主模型$p$值 & 未聚合系数 & 未聚合$p$值 \\
+    \midrule
+    中心化孕周 & 0.003176 & $<0.001$ & 0.003197 & $<0.001$ \\
+    中心化孕周平方 & 0.000264 & $<0.001$ & 0.000270 & $<0.001$ \\
+    BMI & -0.001486 & 0.0046 & -0.001395 & 0.0070 \\
+    年龄 & -0.000515 & 0.2908 & -0.000481 & 0.3238 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+40组同次采血重复测序的Y染色体浓度组内极差中位数为0.00884，95分位数为0.01780，最大值为0.02363。相较于题目使用的$4\%$阈值，这种测量波动不宜忽略，其分布见图~\ref{fig:q1-replicate-error}。该结果既支持Q1采用采血层面聚合，也为问题二的阈值误差扰动提供依据。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{q1_replicate_error.png}
+  \caption{同次采血重复测序的Y染色体浓度极差分布}
+  \label{fig:q1-replicate-error}
+\end{figure}
+
+\subsection{问题一结论及与问题二的衔接}
+
+问题一识别出男胎Y染色体浓度随孕周呈显著非线性上升趋势，BMI对Y染色体浓度具有显著负向影响，而年龄在控制其他因素后未表现出显著独立效应；同时，孕妇之间存在明显的基础水平和孕周变化速度差异。由此，问题二应将连续浓度关系进一步转化为“达到$4\%$阈值的概率与时间”问题，以孕周和BMI建立达标概率模型，并在重复测序误差下寻找不同BMI人群的可靠检测时点。
