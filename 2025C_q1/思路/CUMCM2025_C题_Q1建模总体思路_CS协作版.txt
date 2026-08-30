@@ -1,0 +1,442 @@
+2025 CUMCM C题——问题一建模总体思路（CS协作版）
+
+一、这道题到底在做什么
+
+问题一的目标是： 分析男胎 Y 染色体浓度与检测孕周、孕妇 BMI
+等因素之间的关系，建立关系模型，并检验关系是否具有统计显著性。
+
+这不是一个单纯的“Y 对 Week、BMI 做普通回归”的问题。
+真正需要先处理的数据结构是：
+
+孕妇（woman） └── 多次采血 / 不同孕周（blood draw） └──
+部分同次采血又进行了重复测序（sequencing replicate）
+
+因此： 1. 同一孕妇的不同记录不是独立样本； 2.
+同一次采血的重复测序更不能当成独立的生物学样本； 3.
+最终模型需要同时描述总体规律和孕妇个体差异。
+
+整个 Q1 的核心逻辑：
+
+原始数据 → 数据质量审计 → 识别重复测量结构 → EDA 判断关系形态 →
+确定候选模型 → 处理共线性和重复测序 → 建立 LMM → 检查随机效应与非线性 →
+模型诊断 → 敏感性分析 → 冻结最终模型 → 为 Q2 的 4% 阈值时点问题提供依据
+
+二、第一步：理解数据结构
+
+原始男胎数据： - 1082 条检测记录 - 267 名孕妇 - 260
+名孕妇至少有两个不同孕周的观测 - 因此属于明显的纵向重复测量数据
+
+核心变量： - Y：Y 染色体浓度（因变量） - Week：检测孕周 - BMI：孕妇
+BMI - Age：孕妇年龄 - Woman ID：孕妇代码 - Blood Draw No.：检测抽血次数
+
+孕周原始形式需要统一转为连续周数：
+
+    t = week + day / 7
+
+例如： 11w+6 → 11 + 6/7 ≈ 11.857 周
+
+三、第二步：数据质量审计
+
+检查内容包括： - Y 是否缺失 - BMI 是否缺失 - Week 是否能正常解析 -
+是否存在完全重复记录 - 每个孕妇有多少条记录 -
+是否存在同一次采血的重复测序 - BMI / Weight / Height 是否存在强共线性
+
+Q1 核心变量中： - Y 无缺失 - BMI 无缺失 - Week 无解析失败 -
+无完全重复记录
+
+但发现一个非常重要的问题：
+
+按 (孕妇代码, 检测抽血次数)
+
+分组后，共有 40 个“同次采血重复测序组”，涉及 101 条记录。
+
+这意味着： 同一个 biological sample 被测了不止一次。
+
+如果直接把这些记录全部作为独立样本，会产生 pseudoreplication（伪重复）。
+
+四、第三步：确定分析单位
+
+最终决定：
+
+主分析单位 = 一次采血（blood draw）
+
+对于同一个： woman + blood_draw_no
+
+若存在多次测序，则对 Y 浓度取均值。
+
+因此：
+
+1082 条原始测序记录 → 聚合成 1021 个采血层面的观测
+
+同时保留原始 1082 条记录，后面做 sensitivity analysis（敏感性分析）。
+
+这个处理的意义： - 避免同一次采血被重复计权； -
+不把技术重复误认为独立生物学观测； -
+后面还能用原始数据验证“取均值”是否改变结论。
+
+五、第四步：EDA——不是为了画图，而是为了决定模型
+
+1.  Y vs Gestational Week
+
+Pearson： r = 0.126560
+
+Spearman： rho = 0.084287
+
+边际上呈弱正相关。
+
+但 LOWESS 与线性拟合存在明显差异， 说明 Week 对 Y
+的作用可能不是纯线性的。
+
+因此： 后续需要检查 Week²（二次项）。
+
+2.  Y vs BMI
+
+Pearson： r = -0.151300
+
+Spearman： rho = -0.154959
+
+总体呈负相关。
+
+LOWESS 有局部波动，因此不能只靠散点图判断最终效应； BMI
+的方向和显著性需要在控制 Week、Age 和重复测量后判断。
+
+3.  Individual trajectories
+
+将同一孕妇不同孕周的 Y 连起来后发现： - 不同孕妇基础 Y 水平不同； -
+不同孕妇随孕周变化的速度也不同； - 同一孕妇内部记录明显相关。
+
+这张图直接说明：
+
+Ordinary Multiple Linear Regression 不是最合理的主模型。
+
+需要 Mixed-Effects Model。
+
+六、第五步：候选模型与决策
+
+最开始考虑：
+
+M0：普通多元线性回归 Y ~ Week + BMI + Age
+
+作用： 只作为 baseline / 对照思路。
+
+问题： 忽略同一孕妇内部相关性，因此不作为最终主模型。
+
+M1：随机截距 LMM Y ~ Week + BMI + Age + random intercept by woman
+
+允许不同孕妇拥有不同的基础 Y 水平。
+
+M2：随机截距 + 随机孕周斜率 LMM Y ~ Week + BMI + Age + random
+intercept + random slope of Week
+
+允许： 不同孕妇基础水平不同， 而且 Y 随孕周变化速度也不同。
+
+进一步检查： Week 是否需要非线性项。
+
+七、第六步：共线性处理
+
+BMI、Weight、Height 存在数学关系：
+
+    BMI = Weight / Height²
+
+实际 VIF： - BMI ≈ 218.60 - Weight ≈ 351.34 - Height ≈ 106.90 - Age ≈
+1.01
+
+因此不能把 BMI、Weight、Height 同时塞进模型。
+
+最终决定： - 保留 BMI - 不同时放 Weight、Height - Age 保留作为控制变量
+
+原因： 1. BMI 是题目 Q2/Q3 的核心变量； 2. BMI 与 Weight/Height
+同时进入会产生严重共线性； 3. Age
+没有明显共线性，而且具有合理的临床控制意义。
+
+八、第七步：为什么加入 Week²
+
+EDA 已提示 Week 与 Y 不是简单直线关系。
+
+模型比较结果：
+
+随机斜率线性模型： AIC ≈ -4855.4
+
+加入 Week²： AIC ≈ -4909.3
+
+Week²： p ≈ 1.45 × 10^-14
+
+说明加入 Week² 有明显证据支持。
+
+同时测试 BMI²： 改善非常有限，BIC 甚至略差。
+
+因此： - Week 保留二次项； - BMI 保持线性； -
+不继续为了“高级”增加复杂项。
+
+九、第八步：最终冻结模型
+
+先中心化孕周：
+
+    W_ij = Week_ij - mean(Week)
+
+本数据： mean(Week) = 16.667343
+
+最终模型：
+
+    Y_ij
+    = β0
+    + β1 W_ij
+    + β2 W_ij²
+    + β3 BMI_ij
+    + β4 Age_i
+    + b0_i
+    + b1_i W_ij
+    + ε_ij
+
+其中：
+
+Y_ij 第 i 名孕妇第 j 次采血的 Y 染色体浓度
+
+β0 ~ β4 population-level fixed effects
+
+b0_i 第 i 名孕妇的 random intercept
+
+b1_i 第 i 名孕妇关于孕周的 random slope
+
+ε_ij residual error
+
+十、第九步：最终模型结果
+
+样本： - 1021 blood-draw observations - 267 women
+
+模型： - Log-likelihood = 2463.644746 - AIC = -4909.289493 - BIC =
+-4864.932653 - Converged = True
+
+固定效应：
+
+Intercept coefficient = 0.138148 p < 0.001
+
+Centered Week coefficient = 0.003176 p ≈ 4.75e-36
+
+Week² coefficient = 0.000264 p ≈ 1.45e-14
+
+BMI coefficient = -0.001486 p = 0.00458
+
+Age coefficient = -0.000515 p = 0.29077
+
+十一、结果怎么解释
+
+1.  Gestational Week
+
+Week 和 Week² 都显著。
+
+因此不能只写： “孕周和 Y 正相关”。
+
+更准确的结论是：
+
+Y 染色体浓度与孕周之间存在显著非线性关系；
+结合模型预测曲线，在样本观测孕周范围内， Y 浓度总体随孕周增加而升高。
+
+2.  BMI
+
+BMI 系数： -0.001486
+
+p： 0.00458
+
+因此在控制孕周和年龄后， BMI 对 Y 浓度具有显著负向影响。
+
+BMI 每增加 1 kg/m²， 模型预测 Y 浓度平均下降：
+
+    0.001486
+
+如果换成百分数浓度： 约下降 0.149 个百分点。
+
+3.  Age
+
+p = 0.2908
+
+不能说： “年龄没有影响”。
+
+正确表述： 在控制孕周和 BMI 后，
+当前数据没有提供足够证据证明年龄具有显著独立效应。
+
+十二、随机效应说明了什么
+
+Random intercept SD： 0.030055
+
+Random slope SD： 0.002725
+
+Intercept-slope correlation： 0.485073
+
+说明：
+
+不同孕妇不仅基础 Y 浓度不同， 其 Y 浓度随孕周变化的速度也存在差异。
+
+这支持： random intercept + random slope 而不是只做普通回归。
+
+十三、模型诊断
+
+1.  Residual vs Fitted
+
+用途： 检查残差是否存在明显系统结构、 非线性遗漏、异方差等。
+
+结果： 残差总体围绕 0 分布， 没有非常明显的系统性曲线，
+但不同拟合区域离散程度并非完全一致。
+
+2.  Q-Q Plot
+
+用途： 检查 residual normality。
+
+结果： 中部较接近理论直线， 两端存在较明显偏离。
+
+因此不能写： “残差完全服从正态分布”。
+
+更合理的说法： 模型对主要均值结构描述较稳定， 但尾部正态性并不完美，
+因此需要结合敏感性分析判断结论是否稳健。
+
+十四、敏感性分析
+
+主模型使用： 1021 个聚合后的 blood-draw observations。
+
+敏感性分析重新使用： 1082 条未聚合原始记录。
+
+结果：
+
+Week： 方向一致，显著性一致。
+
+Week²： 方向一致，显著性一致。
+
+BMI： 仍为负，仍显著。
+
+Age： 仍不显著。
+
+因此： 核心统计结论并不是“同次采血取均值”这一处理人为造成的。
+
+这验证的是： processing robustness（数据处理稳健性）
+
+不是 predictive validation。
+
+十五、重复测序误差为什么重要
+
+40 个同次采血重复测序组中：
+
+Y 浓度组内极差： - median ≈ 0.00884 - p95 ≈ 0.01780 - max ≈ 0.02363
+
+题目关键阈值： Y = 0.04
+
+因此重复测序产生的绝对数值波动， 对于接近 4%
+阈值的样本可能具有实际意义。
+
+注意： 不能写成“测量误差率为 22%”。
+
+正确理解是： median range / 0.04 ≈ 22%， 只是说明重复测序波动相对于 4%
+阈值并不小。
+
+这个信息 Q1 用来说明： 为什么同次采血重复测序不能当独立样本。
+
+它在 Q2/Q3 会更重要： 因为后面要直接判断“什么时候达到 4%”，
+测量误差可能改变阈值判定。
+
+十六、七张图分别是干什么的
+
+1.  q1_y_vs_week.png 目的： 看 Y 与孕周的边际关系； 比较 linear fit 和
+    LOWESS； 判断是否需要非线性项。
+
+2.  q1_y_vs_bmi.png 目的： 看 Y 与 BMI 的边际关系；
+    初步判断方向和非线性。
+
+3.  q1_individual_trajectories.png 目的： 展示同一孕妇重复测量；
+    展示个体轨迹差异； 为 LMM 的 random effects 提供直观依据。
+
+4.  q1_predicted_Y_by_week_BMI.png 目的： 可视化最终 LMM 的固定效应；
+    展示不同 BMI 水平下 Y 随孕周的变化。 注意其中 BMI 25/50/75
+    percentile 只是展示， 不是 Q2 最终 BMI 分组。
+
+5.  q1_residual_vs_fitted.png 目的： 模型残差诊断。
+
+6.  q1_residual_qq.png 目的： 检查残差正态性及尾部偏离。
+
+7.  q1_replicate_error.png 目的： 描述同次采血重复测序波动；
+    支撑主分析的聚合策略； 为 Q2/Q3 measurement-error sensitivity 铺垫。
+
+十七、完整决策树
+
+START | v 读取男胎数据 | v 确认题目目标： 解释 Y concentration 与 Week /
+BMI 等因素关系 | v 数据质量审计 | +–> 缺失 / 解析失败 / 完全重复？ | | |
+–> Q1核心变量无严重问题 | v 检查 observation unit | +–>
+同一孕妇有多次检测？ | | | –> YES：存在 longitudinal repeated measures |
++–> 同次采血有重复测序？ | –> YES：40 groups | –> 主分析聚合到
+blood-draw level | v EDA | +–> Y vs Week | –> 总体正向 | –> LOWESS
+提示非线性 | +–> Y vs BMI | –> 总体负向 | +–> Individual trajectories –>
+明显个体异质性 | v 普通线性回归是否适合作主模型？ | –> NO
+原因：同一孕妇内部观测相关 | v 选择 LMM | +–> Random intercept? | –> YES
+| +–> Random slope of Week? –> YES AIC 明显改善 | v 检查固定效应结构 |
++–> BMI + Weight + Height 同时放？ | –> NO：严重共线 | +–> Week²？ | –>
+YES：显著改善模型 | +–> BMI²？ –> NO：收益有限 | v 冻结最终模型 | v Y ~
+W + W² + BMI + Age + (1 + W | Woman) | v 模型诊断 | +–> residual vs
+fitted +–> Q-Q | v 敏感性分析 | –> 使用1082条未聚合数据重新拟合 –>
+主要结论不变 | v FINAL CONCLUSION | +–>
+Week：显著非线性影响，总体随孕周升高 +–> BMI：显著负向影响 +–>
+Age：未发现显著独立效应 +–> 存在明显个体异质性 | v 连接 Q2 | –> BMI
+显著影响 Y –> Q2 研究 BMI 与“达到 Y>=4% 的时间” –> 从 continuous outcome
+转向 threshold-time problem
+
+十八、Q1 最终状态
+
+Statistical Audit：
+
+    PASS — MODEL FROZEN
+
+目前没有理由继续增加模型。
+
+不要再为了“高级”尝试： - Random Forest - XGBoost - Neural Network -
+大量多项式 - 无目的模型 stacking
+
+因为 Q1 的目标是： 建立具有统计解释能力的关系模型， 而当前 LMM
+已经解决： - repeated measures - individual heterogeneity - nonlinear
+gestational-week effect - BMI effect - statistical significance -
+robustness
+
+继续增加模型复杂度不会明显改善题目回答质量。
+
+十九、CS 同学如果需要复现，最重要的工程口径
+
+主模型数据： male data → parse gestational week → groupby(woman,
+blood_draw_no) → mean Week / BMI / Age / Y → 1021 observations
+
+中心化： centered_week = week - 16.667343
+
+平方项： centered_week_sq = centered_week ** 2
+
+模型（statsmodels）：
+
+    mixedlm(
+        "Y ~ centered_week + centered_week_sq + BMI + Age",
+        data=main_data,
+        groups=woman,
+        re_formula="1 + centered_week"
+    )
+
+估计： ML reml=False optimizer=lbfgs
+
+复现时关键 sanity check：
+
+    N observations = 1021
+    N women = 267
+    logLik ≈ 2463.6447
+    AIC ≈ -4909.2895
+
+主要系数：
+
+    Week       ≈  0.003176
+    Week²      ≈  0.000264
+    BMI        ≈ -0.001486
+    Age        ≈ -0.000515
+
+如果这些数值明显不同， 优先检查： 1. 孕周解析； 2. 同次采血聚合口径； 3.
+week centering； 4. re_formula； 5. REML 是否设为 False； 6.
+是否使用正确 sheet 和列。
+
+二十、一句话总结 Q1
+
+Q1 的核心不是“找到一个拟合 Y 的算法”，而是先识别出
+“孕妇—采血—重复测序”的层级数据结构，避免伪重复， 再利用 EDA
+发现孕周非线性和 BMI 负向趋势，
+最终通过带随机截距、随机孕周斜率和孕周二次项的 LMM
+建立可解释的关系模型，并通过残差诊断与未聚合数据敏感性分析
+确认主要结论稳定，为 Q2 的 4% 阈值达标时间建模提供统计依据。
