@@ -1,0 +1,92 @@
+%! TEX program = xelatex
+\documentclass[UTF8,a4paper,12pt,fontset=fandol]{ctexart}
+
+\usepackage[top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs,tabularx,multirow,longtable,array}
+\usepackage{graphicx,float,subcaption}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{appendix}
+
+\graphicspath{{figures/}{figures/q2/}}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0pt}
+\linespread{1.25}
+\pagestyle{plain}
+
+\ctexset{
+  section={format=\zihao{4}\bfseries,beforeskip=1.2ex,afterskip=0.8ex},
+  subsection={format=\zihao{-4}\bfseries,beforeskip=1ex,afterskip=0.6ex},
+  subsubsection={format=\zihao{-4}\bfseries,beforeskip=0.8ex,afterskip=0.4ex}
+}
+
+\captionsetup{font=small,labelsep=quad}
+\setlist{nosep,leftmargin=2em}
+
+\lstset{
+  basicstyle=\small\ttfamily,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  frame=single,
+  breaklines=true,
+  showstringspaces=false,
+  keywordstyle=\color{blue!70!black},
+  commentstyle=\color{green!45!black},
+  stringstyle=\color{purple}
+}
+
+\begin{document}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% ======================== 摘要专用页 ========================
+\begin{center}
+  {\zihao{3}\bfseries NIPT的时点选择与胎儿的异常判定}
+\end{center}
+
+\begin{center}
+  {\zihao{4}\bfseries 摘\quad 要}
+\end{center}
+
+% 摘要应在四问结果完成后统一撰写，并给出关键数值结论。
+本文针对NIPT检测时点选择与胎儿异常判定问题，基于男胎和女胎的纵向检测数据开展建模分析。当前已完成问题背景、问题要求、问题分析以及问题二的建模与结果整理，其余问题完成后再统一补充摘要中的方法、关键结果和模型评价。
+
+\vspace{0.8em}
+\noindent\textbf{关键词：}无创产前检测；Logistic回归；CART分组；敏感性分析
+
+\newpage
+
+% =========================== 正文 ===========================
+\input{sections/01_problem}
+\input{sections/02_assumptions}
+\input{sections/03_data}
+\input{sections/04_q1}
+\input{sections/05_q2}
+\input{sections/06_q3}
+\input{sections/07_q4}
+
+% ========================= 参考文献 =========================
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+% =========================== 附录 ===========================
+\newpage
+\begin{appendices}
+
+\section{支撑材料文件说明}
+为避免整段程序挤占论文正文篇幅，源代码、清洗数据和程序结果均作为独立支撑材料随论文一并保存：
+\begin{itemize}
+  \item 问题二核心程序：\path{code/q2_optimal_timing.py}；
+  \item 问题二清洗数据：\path{data/processed/q2_male_cleaned.xlsx}；
+  \item 问题二程序结果：\path{results/q2/}；
+  \item 问题二正文插图：\path{figures/q2/}。
+\end{itemize}
+正式提交时，应按照比赛当年的支撑材料要求单独提交程序和数据文件，不在论文正文中粘贴完整代码。
+
+\end{appendices}
+
+\end{document}
