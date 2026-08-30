@@ -1,0 +1,217 @@
+\section{问题二的模型建立与求解}
+
+\subsection{与问题一的联系及总体思路}
+
+问题一用于识别孕周、BMI等指标与Y染色体浓度之间的关系；问题二进一步把这种关系转化为可执行的检测决策。其核心不再只是解释Y染色体浓度如何变化，而是回答“不同BMI孕妇在何时检测，既能保证足够的达标概率，又能尽量避免延迟发现风险”。
+
+为此，本文采用“纵向达标概率建模—可靠性约束下的时点反演—CART自动分组—误差与稳定性检验”的四步框架。首先利用问题一统一得到的1021次采血记录建立达标概率模型；随后反演不同BMI水平达到目标可靠性的最早孕周；再利用一维CART将连续BMI压缩为若干可解释区间；最后使用Bootstrap和重复测序误差扰动检验结果稳定性。
+
+\subsection{首次观测达标孕周的探索性分析}
+
+先对260名曾观测到Y染色体浓度达标的孕妇，绘制基线BMI与首次观测达标孕周$T$的散点图，结果见图~\ref{fig:q2-bmi-week}。Spearman秩相关系数为$\rho=0.0878$，双侧检验$p=0.158$，表明二者仅呈极弱且不显著的正相关。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{q2_bmi_first_observed_week.png}
+  \caption{基线BMI与首次观测Y染色体浓度达标孕周}
+  \label{fig:q2-bmi-week}
+\end{figure}
+
+上述弱相关不能直接解释为BMI没有作用。由第~\ref{eq:q2-status}式可知，达标时间的观测依赖于实际采样安排；特别是首次检测已经达标的217名孕妇，其真实达标时刻只能确定为早于首次检测。若直接对首次观测达标孕周进行普通回归或CART分组，会把“何时接受检测”与“何时生理达标”混为一谈。因此，本文不把图~\ref{fig:q2-bmi-week}中的$T$作为主模型的连续响应变量，而改用每名孕妇的全部纵向检测记录建立达标概率模型。
+
+\subsection{纵向达标概率模型}
+
+\subsubsection{模型设定}
+
+设$W_{ij}$为第$i$名孕妇第$j$次独立采血时的孕周，$B_i$为其基线BMI，$D_{ij}$为第~\ref{eq:q2-status}式定义的达标状态。记
+
+\begin{equation}
+  p_{ij}=P\!\left(D_{ij}=1\mid W_{ij},B_i\right).
+  \label{eq:q2-probability}
+\end{equation}
+
+候选模型包括线性Logistic回归、含二次项与交互项的Logistic回归、样条Logistic回归和梯度提升树，并设置仅使用总体达标率的常数模型作为基准。线性Logistic模型写为
+
+\begin{equation}
+  \operatorname{logit}(p_{ij})
+  =\beta_0+\beta_1W_{ij}+\beta_2B_i.
+  \label{eq:q2-logistic}
+\end{equation}
+
+由于各孕妇的检测次数不同，若给每条记录相同权重，检测次数较多的孕妇会对参数估计产生过大影响。因此，将第$i$名孕妇全部记录的总权重设为1，每条记录权重取其检测次数的倒数。
+
+\subsubsection{分组交叉验证与模型选择}
+
+为防止同一孕妇的多次记录同时出现在训练集和验证集中，采用以孕妇代码为分组单位的五折交叉验证。模型选择以LogLoss为主要指标，Brier得分和AUC为辅助指标；LogLoss和Brier越小，说明概率预测越准确，AUC越大，说明区分达标与未达标记录的能力越强。相关方法可参考Logistic回归与统计学习理论\cite{hosmer2013applied,hastie2009elements}。
+
+\begin{table}[H]
+  \centering
+  \caption{候选达标概率模型的分组五折交叉验证结果}
+  \label{tab:q2-model-cv}
+  \begin{tabular}{ccccc}
+    \toprule
+    模型 & LogLoss & 标准误 & Brier & AUC \\
+    \midrule
+    二次交互Logistic & 0.3693 & 0.0254 & 0.1069 & 0.5854 \\
+    线性Logistic & 0.3702 & 0.0252 & 0.1071 & 0.5862 \\
+    样条Logistic & 0.3721 & 0.0269 & 0.1076 & 0.6001 \\
+    梯度提升树 & 0.3751 & 0.0342 & 0.1086 & 0.6310 \\
+    基准常数模型 & 0.3783 & 0.0293 & 0.1095 & 0.5000 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.96\textwidth]{q2_model_comparison.png}
+  \caption{候选达标概率模型的交叉验证比较}
+  \label{fig:q2-model-comparison}
+\end{figure}
+
+由表~\ref{tab:q2-model-cv}和图~\ref{fig:q2-model-comparison}可见，二次交互Logistic取得最低LogLoss，但其与线性Logistic的差值仅为0.0009，远小于相应交叉验证标准误0.0254。依据一标准误差规则，在预测误差没有显著恶化的情况下优先选择结构更简单的线性Logistic模型。梯度提升树虽然AUC相对较高，但LogLoss和Brier均较差，说明其概率校准能力不足，不适合作为本题时点反演的主模型。
+
+将线性Logistic模型系数换算回原始量纲，得到
+
+\begin{equation}
+  \operatorname{logit}(p)
+  =5.2836+0.0507W-0.1300B.
+  \label{eq:q2-final-logistic}
+\end{equation}
+
+孕周系数为正、BMI系数为负，表示在控制另一变量后，孕周增加有利于Y染色体浓度达标，而BMI升高会降低同一孕周下的达标概率。不过，最终模型AUC仅为0.5862，说明只使用BMI和孕周时个体区分能力有限。因此，本文将该模型用于群体检测时点决策，不将其解释为高精度个体诊断模型。
+
+\subsection{可靠性约束下的最佳检测时点}
+
+题目要求同时兼顾检测准确性和尽早发现风险。本文采用词典序决策准则：首先满足预设的达标可靠性，在满足可靠性的可行孕周中选择最早时点。为符合群体达标概率一般不随孕周下降的规律，对预测概率曲线施加累积最大值约束。定义给定BMI下达到$90\%$预测达标概率的最早孕周为
+
+\begin{equation}
+  t_{0.90}(B)
+  =\min\left\{w:P(Y\geq0.04\mid B,w)\geq0.90\right\},
+  \quad 10\leq w\leq25.
+  \label{eq:q2-target-week}
+\end{equation}
+
+对第$g$个BMI组，令$\bar p_g(w)$为组内孕妇在孕周$w$的平均预测达标概率，则推荐时点为
+
+\begin{equation}
+  t_g^{*}=\min\left\{w:\bar p_g(w)\geq q_g\right\}.
+  \label{eq:q2-group-week}
+\end{equation}
+
+通常取$q_g=0.90$。若某组在25周内仍不能达到$90\%$，则将可行阈值降为$85\%$，在达到该阈值的最早孕周先行检测，并对未达标样本安排复测。该规则避免为了追求小幅准确率提升而把检测过度推迟至治疗窗口更加紧张的阶段。
+
+\subsection{基于CART的BMI自动分组}
+
+以基线BMI为输入、模型反演得到的$t_{0.90}$为输出，建立一维CART回归树\cite{breiman1984cart}。CART通过选择BMI切点，使各叶节点内预测达标时点的离差平方和最小：
+
+\begin{equation}
+  \min_{G_1,\ldots,G_K}
+  \sum_{g=1}^{K}\sum_{i\in G_g}
+  \left(t_i-\bar t_g\right)^2.
+  \label{eq:q2-cart-objective}
+\end{equation}
+
+为保证分组具有基本样本量，规定每个叶节点至少包含22名孕妇，并比较3至5个叶节点的方案。相应五折交叉验证MAE分别为1.354、0.830和0.753周；根据一标准误差规则，5组方案仍是唯一满足阈值的方案，故最终选择5个BMI组。模型确定的切点为28.63、29.59、31.30和32.70，分组结果如图~\ref{fig:q2-cart-groups}所示。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.96\textwidth]{q2_bmi_groups.png}
+  \caption{CART自动BMI分组与推荐NIPT时点}
+  \label{fig:q2-cart-groups}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{BMI分组、推荐检测时点及预测可靠性}
+  \label{tab:q2-group-result}
+  \begin{tabularx}{\textwidth}{c>{\centering\arraybackslash}Xcccc}
+    \toprule
+    组别 & BMI区间 & 人数 & 推荐孕周 & 平均达标率 & 检测策略 \\
+    \midrule
+    1 & $B<28.63$ & 23 & 11.0 & 90.1\% & 满足90\%约束 \\
+    2 & $28.63\leq B<29.59$ & 35 & 14.0 & 90.1\% & 满足90\%约束 \\
+    3 & $29.59\leq B<31.30$ & 76 & 17.5 & 90.2\% & 满足90\%约束 \\
+    4 & $31.30\leq B<32.70$ & 43 & 21.5 & 90.1\% & 满足90\%约束 \\
+    5 & $B\geq32.70$ & 90 & 21.0 & 85.2\% & 初检后安排复测 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+由表~\ref{tab:q2-group-result}可知，前四组均选择达到$90\%$平均达标概率的最早时点。第五组在25周内仍无法达到$90\%$，因此按照第~\ref{eq:q2-group-week}式的备用规则，在21.0周达到$85\%$时先进行初检，并对未达标者尽快复测。由此可见，第五组推荐时点略早于第四组并非模型认为高BMI孕妇更早达标，而是两组采用了不同的可靠性约束；这种处理体现了对延迟风险的控制。
+
+不同BMI组的达标概率曲线如图~\ref{fig:q2-probability-curves}所示。总体上，BMI越高，同一孕周下的预测达标概率越低，达到$90\%$可靠性所需的时间越晚。最高BMI组在25周内仍未达到$90\%$水平，也说明对其采用“较早初检加复测”比单纯延迟更为合理。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.96\textwidth]{q2_probability_curves.png}
+  \caption{不同BMI组的Y染色体浓度预测达标概率曲线}
+  \label{fig:q2-probability-curves}
+\end{figure}
+
+\subsection{分组稳定性与检测误差分析}
+
+\subsubsection{BMI切点的Bootstrap稳定性}
+
+对267名孕妇进行300次Bootstrap有放回抽样，每次重新拟合5叶节点CART并记录切点，结果见表~\ref{tab:q2-bootstrap}。
+
+\begin{table}[H]
+  \centering
+  \caption{300次Bootstrap下BMI切点的稳定性}
+  \label{tab:q2-bootstrap}
+  \begin{tabular}{cccc}
+    \toprule
+    切点 & 原始值 & Bootstrap中位数 & 95\%区间 \\
+    \midrule
+    1 & 28.63 & 28.98 & $[28.51,29.65]$ \\
+    2 & 29.59 & 29.79 & $[29.34,31.00]$ \\
+    3 & 31.30 & 31.30 & $[31.02,31.84]$ \\
+    4 & 32.70 & 32.66 & $[32.50,32.84]$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+第四切点的区间较窄，稳定性相对较好；前三个切点存在不同程度漂移。由于第一组样本量仅为23，表中保留两位小数主要用于模型复现，实际应用时更适合按照约0.5个BMI单位进行近似解释，不宜将切点视为绝对精确的临床边界。
+
+\subsubsection{Y染色体浓度测量误差}
+
+对于40组同次采血重复测序，设组内最大值与最小值之差为$\Delta$。在把该极差近似视为两次独立测量之差的条件下，若单次测量误差独立同分布且方差为$\sigma^2$，则
+
+\begin{equation}
+  \operatorname{Var}(\Delta)=2\sigma^2.
+  \label{eq:q2-error-variance}
+\end{equation}
+
+据此估计单次Y染色体浓度测量误差标准差为$\sigma=0.007378$，即0.738个百分点。随后对每条Y染色体浓度加入$N(0,\sigma^2)$扰动，重复200次重新判断$4\%$阈值、拟合概率模型并计算推荐时点。平均约有5.0\%的采血记录在扰动后跨越$4\%$阈值。
+
+\begin{table}[H]
+  \centering
+  \caption{200次测量误差扰动下推荐时点的稳定性}
+  \label{tab:q2-error-result}
+  \begin{tabular}{cccc}
+    \toprule
+    组别 & 原始推荐孕周 & 扰动中位数 & 95\%扰动区间 \\
+    \midrule
+    1 & 11.0 & 13.0 & $[10.0,17.5]$ \\
+    2 & 14.0 & 16.5 & $[10.5,20.0]$ \\
+    3 & 17.5 & 20.0 & $[10.0,24.5]$ \\
+    4 & 21.5 & 22.0 & $[10.0,25.0]$ \\
+    5 & 21.0 & 22.5 & $[19.5,25.0]$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.90\textwidth]{q2_error_sensitivity.png}
+  \caption{Y染色体浓度检测误差对推荐时点的影响}
+  \label{fig:q2-error-sensitivity}
+\end{figure}
+
+由表~\ref{tab:q2-error-result}和图~\ref{fig:q2-error-sensitivity}可知，第五组推荐时点中位数为22.5周，与原方案方向基本一致；各组尤其是中间BMI组的扰动区间较宽，表明接近$4\%$阈值的测量误差可能明显改变推荐时点。因此，表~\ref{tab:q2-group-result}给出的时点应理解为群体层面的基准建议，对于临界BMI或临界Y浓度样本，应结合复测进行个体化判断。
+
+\subsection{问题二结论与模型评价}
+
+本文最终将男胎孕妇划分为$B<28.63$、$[28.63,29.59)$、$[29.59,31.30)$、$[31.30,32.70)$和$B\geq32.70$五组，推荐初次NIPT检测时点依次为11.0、14.0、17.5、21.5和21.0周。其中，最高BMI组由于在25周内不能达到$90\%$预测达标概率，采用21.0周达到$85\%$后先行检测并安排复测的策略。
+
+该方法利用全部纵向采血记录，避免把首次观测达标孕周误认为精确生理达标时间；按孕妇代码分组的交叉验证减少了数据泄漏；一标准误差规则、最小叶节点约束和Bootstrap共同限制模型复杂度；误差扰动进一步量化了$4\%$阈值附近的不确定性。其局限在于样本以高BMI孕妇为主，低BMI组样本量较少，且最终Logistic模型AUC仅为0.5862。因此，本问结果适合作为相似人群的群体检测时点参考，问题三还需加入年龄、身高、体重和测序质量等因素提高个体化能力。

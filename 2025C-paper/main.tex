@@ -1,0 +1,96 @@
+%! TEX program = xelatex
+\documentclass[UTF8,a4paper,12pt,fontset=fandol]{ctexart}
+
+\usepackage[top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs,tabularx,multirow,longtable,array}
+\usepackage{graphicx,float,subcaption}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{appendix}
+
+\graphicspath{{figures/}{figures/q1/}{figures/q2/}}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0pt}
+\linespread{1.25}
+\pagestyle{plain}
+
+\ctexset{
+  section={format=\zihao{4}\bfseries,beforeskip=1.2ex,afterskip=0.8ex},
+  subsection={format=\zihao{-4}\bfseries,beforeskip=1ex,afterskip=0.6ex},
+  subsubsection={format=\zihao{-4}\bfseries,beforeskip=0.8ex,afterskip=0.4ex}
+}
+
+\captionsetup{font=small,labelsep=quad}
+\setlist{nosep,leftmargin=2em}
+
+\lstset{
+  basicstyle=\small\ttfamily,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  frame=single,
+  breaklines=true,
+  showstringspaces=false,
+  keywordstyle=\color{blue!70!black},
+  commentstyle=\color{green!45!black},
+  stringstyle=\color{purple}
+}
+
+\begin{document}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% ======================== 摘要专用页 ========================
+\begin{center}
+  {\zihao{3}\bfseries NIPT的时点选择与胎儿的异常判定}
+\end{center}
+
+\begin{center}
+  {\zihao{4}\bfseries 摘\quad 要}
+\end{center}
+
+本文针对男胎Y染色体浓度的影响关系及不同BMI人群的NIPT检测时点选择开展建模分析。首先识别“孕妇---采血---重复测序”的层级结构，将1082条测序记录聚合为267名孕妇的1021次采血，并建立含随机截距、随机孕周斜率和孕周二次项的线性混合效应模型。结果表明，Y染色体浓度随孕周呈显著非线性上升趋势，BMI具有显著负向影响，年龄的独立效应不显著；未聚合数据的敏感性分析得到一致结论。
+
+在此基础上，将Y染色体浓度不低于$4\%$定义为达标，比较线性、二次交互、样条Logistic及梯度提升树等候选模型。按孕妇分组的五折交叉验证和一标准误差规则最终选择线性Logistic模型，其LogLoss为0.3702，AUC为0.5862。随后利用CART将BMI划分为$B<28.63$、$[28.63,29.59)$、$[29.59,31.30)$、$[31.30,32.70)$及$B\geq32.70$五组，对应推荐检测时点为11.0、14.0、17.5、21.5和21.0周；最高BMI组采用达到$85\%$可靠性后先检并复测的策略。Bootstrap和测量误差扰动表明部分切点与时点仍具有不确定性，因此结果适合作为群体检测安排依据，不应替代个体临床诊断。
+
+\vspace{0.8em}
+\noindent\textbf{关键词：}无创产前检测；线性混合效应模型；Logistic回归；CART分组；敏感性分析
+
+\newpage
+
+% =========================== 正文 ===========================
+\input{sections/01_problem}
+\input{sections/02_assumptions}
+\input{sections/03_data}
+\input{sections/04_q1}
+\input{sections/05_q2}
+\input{sections/06_q3}
+\input{sections/07_q4}
+
+% ========================= 参考文献 =========================
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+% =========================== 附录 ===========================
+\newpage
+\begin{appendices}
+
+\section{支撑材料文件说明}
+为避免整段程序挤占论文正文篇幅，源代码、清洗数据和程序结果均作为独立支撑材料随论文一并保存：
+\begin{itemize}
+  \item 问题一核心程序：\path{code/q1_final_model.py}；
+  \item 问题一程序结果：\path{results/q1/}；
+  \item 问题一正文插图：\path{figures/q1/}；
+  \item 问题二核心程序：\path{code/q2_optimal_timing.py}；
+  \item 问题二清洗数据：\path{data/processed/q2_male_cleaned.xlsx}；
+  \item 问题二程序结果：\path{results/q2/}；
+  \item 问题二正文插图：\path{figures/q2/}。
+\end{itemize}
+正式提交时，应按照比赛当年的支撑材料要求单独提交程序和数据文件，不在论文正文中粘贴完整代码。
+
+\end{appendices}
+
+\end{document}
