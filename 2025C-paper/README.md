@@ -1,11 +1,11 @@
 # 2025 C题练习仓库
 
-本仓库采用“主文件 + 分章节文件 + 独立数据/代码/图片/结果目录”的结构。论文统一从根目录的 `main.tex` 编译。
+本仓库将完整论文工程统一收在 `2025C-paper/` 文件夹中。写作、代码、数据、图片、结果和最终PDF均在该文件夹内管理。
 
 ## 目录结构
 
 ```text
-2025_Practice/
+2025C-paper/
 ├── main.tex
 ├── sections/
 │   ├── 01_problem.tex
@@ -25,6 +25,10 @@
 ├── results/
 │   ├── q1/
 │   └── q2/
+├── source_materials/
+│   ├── q1_teammate/
+│   ├── q2_teammate/
+│   └── problem_original/
 ├── references.bib
 ├── build/
 └── PDF/
@@ -38,17 +42,18 @@
 - `results/`：程序生成的表格、文本报告和中间图。
 - `figures/`：最终进入论文的图片，按题号建立子目录。
 - `sections/`：论文正文，每道题只修改自己的章节文件。
+- `source_materials/`：队友原稿、旧程序和原始附件的归档区，不由 LaTeX 直接调用。
 - `build/`：LaTeX辅助文件，不提交。
 - `PDF/`：需要留档时手动放置最终PDF。
 
 ## VS Code编译
 
-1. 打开仓库根目录，而不是单独打开某个 `.tex` 文件。
-2. 打开 `main.tex`。
+1. 在 VS Code 中打开仓库，然后展开 `2025C-paper/` 文件夹。
+2. 打开 `2025C-paper/main.tex`。
 3. 第一次编译时选择配方 `XeLaTeX via latexmk`；以后保存文件会自动编译。
-4. 查看 `build/main.pdf`，或运行 `LaTeX Workshop: View LaTeX PDF`。
+4. 查看 `2025C-paper/build/main.pdf`，或运行 `LaTeX Workshop: View LaTeX PDF`。
 
-仓库已经包含 `.vscode/settings.json` 和 `.latexmkrc`，队友克隆后无需重复配置编译器。
+仓库根目录包含 `.vscode/settings.json`，论文工程内包含 `2025C-paper/.latexmkrc`，队友克隆后无需重复配置编译器。
 
 ## 协作约定
 

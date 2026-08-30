@@ -31,9 +31,9 @@ warnings.filterwarnings("ignore")
 # 0. 路径
 # =========================
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATA_PATH = PROJECT_ROOT / "raw_data" / "附件.xlsx"
-FIG_DIR = PROJECT_ROOT / "图表"
-RESULT_DIR = PROJECT_ROOT / "result"
+DATA_PATH = PROJECT_ROOT / "data" / "raw" / "attachment.xlsx"
+FIG_DIR = PROJECT_ROOT / "figures" / "q1"
+RESULT_DIR = PROJECT_ROOT / "results" / "q1"
 
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
@@ -190,7 +190,7 @@ def significance_label(p):
 if not DATA_PATH.exists():
     raise FileNotFoundError(
         f"未找到数据文件：{DATA_PATH}\n"
-        "请确认脚本位于项目的“代码”目录，且原始数据位于 raw_data/附件.xlsx"
+        "请确认脚本位于 2025C-paper/code/，且原始数据位于 2025C-paper/data/raw/attachment.xlsx"
     )
 
 raw = pd.read_excel(DATA_PATH, sheet_name=SHEET_NAME)
