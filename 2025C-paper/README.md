@@ -25,10 +25,6 @@
 ├── results/
 │   ├── q1/
 │   └── q2/
-├── source_materials/
-│   ├── q1_teammate/
-│   ├── q2_teammate/
-│   └── problem_original/
 ├── references.bib
 ├── build/
 └── PDF/
@@ -42,7 +38,6 @@
 - `results/`：程序生成的表格、文本报告和中间图。
 - `figures/`：最终进入论文的图片，按题号建立子目录。
 - `sections/`：论文正文，每道题只修改自己的章节文件。
-- `source_materials/`：队友原稿、旧程序和原始附件的归档区，不由 LaTeX 直接调用。
 - `build/`：LaTeX辅助文件，不提交。
 - `PDF/`：需要留档时手动放置最终PDF。
 
